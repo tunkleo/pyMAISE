@@ -30,6 +30,7 @@ from pyMAISE.methods.nn._max_pooling_1d import MaxPooling1DLayer
 from pyMAISE.methods.nn._max_pooling_2d import MaxPooling2DLayer
 from pyMAISE.methods.nn._max_pooling_3d import MaxPooling3DLayer
 from pyMAISE.methods.nn._reshape import ReshapeLayer
+from pyMAISE.methods.nn._variational import VariationalLayer
 from pyMAISE.utils.hyperparameters import Choice, HyperParameters
 
 
@@ -48,6 +49,7 @@ class nnHyperModel(HyperModel):
         "MaxPooling3D": MaxPooling3DLayer,
         "Flatten": FlattenLayer,
         "Reshape": ReshapeLayer,
+        "Variational": VariationalLayer,
     }
 
     # Dictionary of supported optimizers

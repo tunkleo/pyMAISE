@@ -23,6 +23,7 @@ setup(
         "scikit-learn",
         "scikit-optimize==0.9.0",
         "tensorflow[and-cuda]>=2.12.0",
+        "tensorflow-probability>=0.25.0",
         "keras-tuner",
         "xarray==2023.10.1",
         "scikeras",
