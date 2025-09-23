@@ -60,7 +60,6 @@ def test_chf_vfnn():
             "optimizer": "Adam",
             "Adam": {
                 "learning_rate": mai.Choice([0.0001, 0.001]),
-                "clipvalue": 0.5,
             },
             "compile_params": {
                 "loss": "mean_squared_error",
