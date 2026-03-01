@@ -8,6 +8,10 @@ from tensorflow.keras.optimizers import Adam
 import pyMAISE.settings as settings
 
 
+class History:
+    def __init__(self, history):
+        self.history = history
+
 class NeuralNetsWrapper(BaseEstimator):
     def __init__(
         self,
@@ -164,7 +168,10 @@ class NeuralNetsWrapper(BaseEstimator):
         return layers
 
     def fit(self, X, y):
-        return self._model.fit(X, y)
+        self._model.fit(X, y)
+        if hasattr(self._model, "history_"):
+            self._model.model.history = History(self._model.history_)
+        return self._model
 
     def predict(self, X):
         return self._model.predict(X)
@@ -352,9 +359,16 @@ class NeuralNetsWrapper(BaseEstimator):
             run_eagerly=self._run_eagerly,
         )
 
+        # Monkey patch for scikeras compatibility (Keras 2 / TF < 2.16)
+        if not hasattr(model, "compiled"):
+            model.compiled = True
+
+        def model_factory():
+            return model
+
         # Set model to KerasRegressor from scikeras
         self._model = KerasRegressor(
-            model=model,
+            model=model_factory,
             random_state=settings.values.random_state,
             warm_start=self._warm_start,
             optimizer=modelopt,

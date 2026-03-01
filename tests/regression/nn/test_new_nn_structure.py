@@ -202,6 +202,3 @@ def test_new_nn_structure():
             / old_nn_structure_results.loc[0, "Test R2"]
             < plus_minus
         )
-
-
-test_new_nn_structure()

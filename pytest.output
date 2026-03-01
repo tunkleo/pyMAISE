@@ -1,0 +1,1400 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.12, pytest-9.0.2, pluggy-1.6.0
+rootdir: /home/lionturkey/projects/pyMAISE
+collected 27 items
+
+tests/regression/classical_models/test_classification.py F               [  3%]
+tests/regression/classical_models/test_fuel_performance.py .             [  7%]
+tests/regression/classical_models/test_heat_conduction.py .              [ 11%]
+tests/regression/classical_models/test_mitr.py F                         [ 14%]
+tests/regression/classical_models/test_reactor_physics.py F              [ 18%]
+tests/regression/nn/test_chf_vfnn.py .                                   [ 22%]
+tests/regression/nn/test_loca_lstm.py .                                  [ 25%]
+tests/regression/nn/test_mnist_conv.py .                                 [ 29%]
+tests/regression/nn/test_new_nn_structure.py F                           [ 33%]
+tests/regression/nn/test_univariate_ts.py .                              [ 37%]
+tests/unit/data/test_handler.py ..                                       [ 44%]
+tests/unit/methods/nn/test_nn_hypermodel.py .                            [ 48%]
+tests/unit/test_postprocessor.py ..                                      [ 55%]
+tests/unit/test_preprocessing.py ....                                    [ 70%]
+tests/unit/test_tuner.py ........                                        [100%]
+
+=================================== FAILURES ===================================
+_____________________________ test_classification ______________________________
+
+    def test_classification():
+        # ===========================================================================
+        # pyMAISE initialization
+        global_settings = mai.init(
+            problem_type=mai.ProblemType.CLASSIFICATION,
+            verbosity=1,
+            random_state=42,
+            num_configs_saved=1,
+            cuda_visible_devices="-1",
+        )
+    
+        # Assertions for global settings
+        assert global_settings.verbosity == 1
+        assert global_settings.random_state == 42
+        assert global_settings.num_configs_saved == 1
+    
+        # Get iris data
+        data, inputs, outputs = read_csv(
+            "https://raw.githubusercontent.com/scikit-learn/scikit-learn/04e39db499"
+            + "afab852e4e2603807384a402a871a9/sklearn/datasets/data/iris.csv",
+            slice(0, 4),
+            slice(4, 5),
+        )
+        # Change output data type and one hot encode
+        outputs = outputs.astype("object")
+        outputs = one_hot_encode(outputs)
+    
+        # Assert inputs and outputs are the correct size
+        assert data.shape == (150, 5)
+        assert inputs.shape == (150, 4)
+        assert outputs.shape == (150, 3)
+    
+        # Train test split
+        split_data = train_test_split([inputs, outputs], test_size=0.3)
+    
+        # Train-test split size assertions
+        assert split_data[0].shape == (105, 4)
+        assert split_data[1].shape == (45, 4)
+        assert split_data[2].shape == (105, 3)
+        assert split_data[3].shape == (45, 3)
+    
+        # ===========================================================================
+        # Model initialization
+        model_settings = {
+            "models": ["DT", "RF", "KN"],
+        }
+        tuning = mai.Tuner(split_data[0], split_data[2], model_settings=model_settings)
+    
+        # ===========================================================================
+        # Hyper-parameter tuning
+        grid_search_spaces = {
+            "DT": {
+                "max_depth": [None, 5, 10, 25, 50],
+                "max_features": [None, "sqrt", "log2"],
+                "min_samples_leaf": [1, 2, 4, 6, 8, 10],
+                "min_samples_split": [2, 4, 6, 8, 10],
+            },
+            "RF": {
+                "n_estimators": [50, 100, 150],
+                "criterion": ["gini", "entropy", "log_loss"],
+                "min_samples_split": [2, 4, 6],
+                "max_features": ["sqrt", "log2"],
+            },
+            "KN": {
+                "n_neighbors": [1, 2, 4, 6, 8, 10, 14, 17, 20],
+                "weights": ["uniform", "distance"],
+                "leaf_size": [1, 5, 10, 15, 20, 25, 30],
+            },
+        }
+    
+        grid_search_configs = tuning.grid_search(
+            param_spaces=grid_search_spaces,
+            models=grid_search_spaces.keys(),
+            cv=ShuffleSplit(
+                n_splits=1, test_size=0.15, random_state=global_settings.random_state
+            ),
+        )
+    
+        # ===========================================================================
+        # Model post-processing
+        postprocessor = mai.PostProcessor(
+            data=split_data,
+            model_configs=[grid_search_configs],
+        )
+    
+        # Performance metric assertions
+        expected_models = {
+            "DT": 1.0,
+            "RF": 1.0,
+            "KN": 1.0,
+        }
+        for key, value in expected_models.items():
+>           assert postprocessor.metrics(model_type=key)["Test Accuracy"].to_numpy()[
+                0
+            ] == pytest.approx(value, 0.0001)
+E           assert np.float64(0.9555555555555556) == 1.0 ± 1.0e-04
+E             
+E             comparison failed
+E             Obtained: 0.9555555555555556
+E             Expected: 1.0 ± 1.0e-04
+
+tests/regression/classical_models/test_classification.py:100: AssertionError
+----------------------------- Captured stdout call -----------------------------
+Reading data from https://raw.githubusercontent.com/scikit-learn/scikit-learn/04e39db499afab852e4e2603807384a402a871a9/sklearn/datasets/data/iris.csv
+Hyperparameter tuning classical models with grid search
+  Tuning DT
+Fitting 1 folds for each of 450 candidates, totalling 450 fits
+  Tuning RF
+Fitting 1 folds for each of 54 candidates, totalling 54 fits
+  Tuning KN
+Fitting 1 folds for each of 126 candidates, totalling 126 fits
+----------------------------- Captured stderr call -----------------------------
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    0.1s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 150 out of 150 | elapsed:    0.1s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 150 out of 150 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    0.1s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 150 out of 150 | elapsed:    0.1s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 150 out of 150 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    0.1s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 150 out of 150 | elapsed:    0.1s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 150 out of 150 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    0.1s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 150 out of 150 | elapsed:    0.1s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 150 out of 150 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    0.1s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 150 out of 150 | elapsed:    0.1s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 150 out of 150 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    0.1s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 150 out of 150 | elapsed:    0.1s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 150 out of 150 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.1s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    0.1s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 150 out of 150 | elapsed:    0.1s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 150 out of 150 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    0.1s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 150 out of 150 | elapsed:    0.1s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 150 out of 150 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    0.1s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 150 out of 150 | elapsed:    0.1s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 150 out of 150 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    0.1s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.1s
+[Parallel(n_jobs=1)]: Done 150 out of 150 | elapsed:    0.1s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 150 out of 150 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    0.1s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 150 out of 150 | elapsed:    0.1s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 150 out of 150 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    0.1s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 150 out of 150 | elapsed:    0.1s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 150 out of 150 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    0.1s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 150 out of 150 | elapsed:    0.1s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 150 out of 150 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    0.1s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 150 out of 150 | elapsed:    0.1s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 150 out of 150 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    0.1s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 150 out of 150 | elapsed:    0.1s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 150 out of 150 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    0.1s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 150 out of 150 | elapsed:    0.1s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 150 out of 150 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.1s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    0.1s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 150 out of 150 | elapsed:    0.1s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 150 out of 150 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    0.1s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 150 out of 150 | elapsed:    0.1s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 150 out of 150 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    0.0s finished
+
+  0%|          | 0/3 [00:00<?, ?it/s]
+DT:  33%|███▎      | 1/3 [00:00<00:00, 11781.75it/s]
+RF:  67%|██████▋   | 2/3 [00:00<00:00, 1260.31it/s] [Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    0.0s finished
+
+KN: 100%|██████████| 3/3 [00:00<00:00, 55.81it/s]  
+KN: 100%|██████████| 3/3 [00:00<00:00, 53.38it/s]
+__________________________________ test_mitr ___________________________________
+
+    def test_mitr():
+        # ===========================================================================
+        # Regression test parameters
+        # Data set parameters
+        num_observations = 1000
+        num_features = 6
+        num_outputs = 22
+    
+        # Expected performance metrics
+        expected_metrics = pd.read_csv(
+            os.path.dirname(__file__) + "/supporting/mitr_testing_metrics.csv"
+        )
+    
+        # ===========================================================================
+        # pyMAISE initialization
+        global_settings = mai.init(
+            problem_type=mai.ProblemType.REGRESSION,
+            verbosity=1,
+            random_state=42,
+            num_configs_saved=1,
+            cuda_visible_devices="-1",
+        )
+    
+        # Assertions for global settings
+        assert global_settings.verbosity == 1
+        assert global_settings.random_state == 42
+        assert global_settings.num_configs_saved == 1
+    
+        # Get MITR data
+        data, inputs, outputs = load_MITR()
+    
+        # Assert inputs and outputs are the correct size
+        assert inputs.shape[0] == num_observations and inputs.shape[1] == num_features
+        assert outputs.shape[0] == num_observations and outputs.shape[1] == num_outputs
+    
+        # Train test split
+        xtrain, xtest, ytrain, ytest = train_test_split(
+            data=[inputs, outputs], test_size=0.3
+        )
+        xtrain, xtest, _ = scale_data(xtrain, xtest, MinMaxScaler())
+        ytrain, ytest, _ = scale_data(ytrain, ytest, MinMaxScaler())
+        data = (xtrain, xtest, ytrain, ytest)
+    
+        # Train-test split size assertions
+        assert (
+            data[0].shape[0] == num_observations * (1 - 0.3)
+            and data[0].shape[1] == num_features
+        )
+        assert (
+            data[1].shape[0] == num_observations * 0.3 and data[1].shape[1] == num_features
+        )
+        assert (
+            data[2].shape[0] == num_observations * (1 - 0.3)
+            and data[2].shape[1] == num_outputs
+        )
+        assert (
+            data[3].shape[0] == num_observations * 0.3 and data[3].shape[1] == num_outputs
+        )
+    
+        # ===========================================================================
+        # Model initialization
+        model_settings = {
+            "models": ["Linear", "Lasso", "DT", "KN", "RF"],
+        }
+        tuning = mai.Tuner(xtrain, ytrain, model_settings=model_settings)
+    
+        # ===========================================================================
+        # Hyper-parameter tuning
+        grid_search_spaces = {
+            "Linear": {"fit_intercept": [True, False]},
+            "Lasso": {"alpha": np.linspace(0.000001, 1, 200)},
+            "DT": {
+                "max_depth": [None, 5, 10, 25, 50],
+                "max_features": [None, "sqrt", "log2", 0.2, 0.4, 0.6, 0.8, 1],
+                "min_samples_leaf": [1, 2, 4, 6, 8, 10],
+                "min_samples_split": [2, 4, 6, 8, 10],
+            },
+            "RF": {
+                "n_estimators": [50, 100, 150],
+                "criterion": ["squared_error", "absolute_error"],
+                "min_samples_split": [2, 4],
+                "max_features": [None, "sqrt", "log2", 1],
+            },
+            "KN": {
+                "n_neighbors": [1, 2, 4, 6, 8, 10, 14, 17, 20],
+                "weights": ["uniform", "distance"],
+                "leaf_size": [1, 5, 10, 15, 20, 25, 30],
+            },
+        }
+    
+        grid_search_configs = tuning.grid_search(
+            param_spaces=grid_search_spaces,
+            models=grid_search_spaces.keys(),
+            cv=ShuffleSplit(
+                n_splits=1, test_size=0.15, random_state=global_settings.random_state
+            ),
+        )
+    
+        # ===========================================================================
+        # Model post-processing
+        postprocessor = mai.PostProcessor(
+            data=data,
+            model_configs=[grid_search_configs],
+        )
+        metrics = postprocessor.metrics(metrics={"MSE": mean_squared_error})[
+            [
+                "Model Types",
+                "Train MAE",
+                "Train MSE",
+                "Train RMSE",
+                "Train R2",
+                "Test MAE",
+                "Test MSE",
+                "Test RMSE",
+                "Test R2",
+            ]
+        ]
+    
+        # Assert expected dataframe and results match
+        print(
+            "Expected Values\n",
+            expected_metrics.sort_values(by=["Test R2"], ascending=False),
+        )
+        print("pyMAISE Values\n", metrics)
+>       pd.testing.assert_frame_equal(
+            expected_metrics.sort_values(by=["Test R2"], ascending=False), metrics
+        )
+
+tests/regression/classical_models/test_mitr.py:138: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+pandas/_libs/testing.pyx:53: in pandas._libs.testing.assert_almost_equal
+    ???
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+>   ???
+E   AssertionError: DataFrame.iloc[:, 1] (column name="Train MAE") are different
+E   
+E   DataFrame.iloc[:, 1] (column name="Train MAE") values are different (20.0 %)
+E   [index]: [0, 1, 4, 3, 2]
+E   [left]:  [0.0102573219649555, 0.0102582601019842, 0.0, 0.0198522623966279, 0.0567078927354968]
+E   [right]: [0.010257321964955511, 0.010258260101984237, 0.0, 0.019878698927031944, 0.05670789273549686]
+E   At positional index 3, first diff: 0.0198522623966279 != 0.019878698927031944
+
+pandas/_libs/testing.pyx:171: AssertionError
+----------------------------- Captured stdout call -----------------------------
+Reading data from ['/home/lionturkey/projects/pyMAISE/pyMAISE/datasets/crx.csv', '/home/lionturkey/projects/pyMAISE/pyMAISE/datasets/powery.csv']
+Hyperparameter tuning classical models with grid search
+  Tuning Linear
+Fitting 1 folds for each of 2 candidates, totalling 2 fits
+  Tuning Lasso
+Fitting 1 folds for each of 200 candidates, totalling 200 fits
+  Tuning DT
+Fitting 1 folds for each of 1200 candidates, totalling 1200 fits
+  Tuning RF
+Fitting 1 folds for each of 48 candidates, totalling 48 fits
+  Tuning KN
+Fitting 1 folds for each of 126 candidates, totalling 126 fits
+Expected Values
+   Model Types  Train MAE  Train MSE  ...  Test MSE  Test RMSE   Test R2
+0      Linear   0.010257   0.000209  ...  0.000181   0.013436  0.995213
+1       Lasso   0.010258   0.000209  ...  0.000181   0.013436  0.995213
+4          KN   0.000000   0.000000  ...  0.002426   0.049258  0.938886
+3          RF   0.019852   0.000625  ...  0.004266   0.065315  0.892846
+2          DT   0.056708   0.005000  ...  0.010906   0.104433  0.723007
+
+[5 rows x 9 columns]
+pyMAISE Values
+   Model Types  Train MAE  Train MSE  ...  Test MSE  Test RMSE   Test R2
+0      Linear   0.010257   0.000209  ...  0.000181   0.013436  0.995213
+1       Lasso   0.010258   0.000209  ...  0.000181   0.013436  0.995213
+4          KN   0.000000   0.000000  ...  0.002426   0.049258  0.938886
+3          RF   0.019879   0.000633  ...  0.004279   0.065414  0.892683
+2          DT   0.056708   0.005000  ...  0.010906   0.104433  0.723007
+
+[5 rows x 9 columns]
+----------------------------- Captured stderr call -----------------------------
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.1s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    0.1s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.1s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    0.2s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.1s
+[Parallel(n_jobs=1)]: Done 150 out of 150 | elapsed:    0.4s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 150 out of 150 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.1s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    0.1s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.1s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    0.2s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.1s
+[Parallel(n_jobs=1)]: Done 150 out of 150 | elapsed:    0.3s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 150 out of 150 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.1s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    0.1s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.1s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    0.1s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.1s
+[Parallel(n_jobs=1)]: Done 150 out of 150 | elapsed:    0.2s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 150 out of 150 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.1s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    0.1s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.1s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    0.1s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.1s
+[Parallel(n_jobs=1)]: Done 150 out of 150 | elapsed:    0.2s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 150 out of 150 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.1s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    0.1s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.1s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    0.1s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.1s
+[Parallel(n_jobs=1)]: Done 150 out of 150 | elapsed:    0.2s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 150 out of 150 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.1s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    0.1s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.1s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    0.1s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.1s
+[Parallel(n_jobs=1)]: Done 150 out of 150 | elapsed:    0.2s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 150 out of 150 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.1s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    0.1s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.1s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    0.1s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.1s
+[Parallel(n_jobs=1)]: Done 150 out of 150 | elapsed:    0.2s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 150 out of 150 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    0.1s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    0.1s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 150 out of 150 | elapsed:    0.2s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 150 out of 150 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    2.7s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    2.7s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    2.7s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    5.4s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    2.7s
+[Parallel(n_jobs=1)]: Done 150 out of 150 | elapsed:    8.2s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 150 out of 150 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    2.5s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    2.6s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    2.5s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    5.1s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    2.5s
+[Parallel(n_jobs=1)]: Done 150 out of 150 | elapsed:    7.7s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 150 out of 150 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    1.4s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    1.4s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    1.4s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    2.8s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    1.4s
+[Parallel(n_jobs=1)]: Done 150 out of 150 | elapsed:    4.3s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 150 out of 150 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    1.3s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    1.3s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    1.3s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    2.7s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    1.3s
+[Parallel(n_jobs=1)]: Done 150 out of 150 | elapsed:    4.1s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 150 out of 150 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    1.4s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    1.4s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    1.4s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    2.8s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    1.4s
+[Parallel(n_jobs=1)]: Done 150 out of 150 | elapsed:    4.2s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 150 out of 150 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    1.3s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    1.4s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    1.3s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    2.6s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    1.3s
+[Parallel(n_jobs=1)]: Done 150 out of 150 | elapsed:    4.1s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 150 out of 150 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    1.1s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    1.1s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    1.1s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    2.2s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    1.1s
+[Parallel(n_jobs=1)]: Done 150 out of 150 | elapsed:    3.3s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 150 out of 150 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    1.0s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    1.1s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    1.0s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    2.1s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    1.0s
+[Parallel(n_jobs=1)]: Done 150 out of 150 | elapsed:    3.2s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 150 out of 150 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    3.2s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    6.6s finished
+
+  0%|          | 0/5 [00:00<?, ?it/s]
+Linear:  20%|██        | 1/5 [00:00<00:00, 13315.25it/s]
+Lasso:  40%|████      | 2/5 [00:00<00:00, 1381.30it/s]  
+DT:  60%|██████    | 3/5 [00:00<00:00, 447.20it/s]    
+RF:  80%|████████  | 4/5 [00:00<00:00, 383.63it/s][Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    3.3s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    6.7s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    0.0s finished
+
+KN: 100%|██████████| 5/5 [00:06<00:00,  1.35s/it] 
+KN: 100%|██████████| 5/5 [00:06<00:00,  1.35s/it]
+_____________________________ test_reactor_physics _____________________________
+
+    def test_reactor_physics():
+        # ===========================================================================
+        # Regression test parameters
+        # Data set parameters
+        num_observations = 1000
+        num_features = 8
+        num_outputs = 1
+    
+        # Expected performance metrics
+        expected_metrics = pd.read_csv(
+            os.path.dirname(__file__) + "/supporting/reactor_physics_testing_metrics.csv"
+        )
+    
+        # ===========================================================================
+        # pyMAISE initialization
+        global_settings = mai.init(
+            problem_type=mai.ProblemType.REGRESSION,
+            verbosity=1,
+            random_state=42,
+            num_configs_saved=1,
+            cuda_visible_devices="-1",
+        )
+    
+        # Assertions for global settings
+        assert global_settings.verbosity == 1
+        assert global_settings.random_state == 42
+        assert global_settings.num_configs_saved == 1
+    
+        # Get reactor physics data
+        data, inputs, outputs = load_xs()
+    
+        # Assert inputs and outputs are the correct size
+        assert inputs.shape[0] == num_observations and inputs.shape[1] == num_features
+        assert outputs.shape[0] == num_observations and outputs.shape[1] == num_outputs
+    
+        # Train test split
+        xtrain, xtest, ytrain, ytest = train_test_split(
+            data=[inputs, outputs], test_size=0.3
+        )
+        xtrain, xtest, _ = scale_data(xtrain, xtest, MinMaxScaler())
+        ytrain, ytest, _ = scale_data(ytrain, ytest, MinMaxScaler())
+        data = (xtrain, xtest, ytrain, ytest)
+    
+        # Train-test split size assertions
+        assert (
+            data[0].shape[0] == num_observations * (1 - 0.3)
+            and data[0].shape[1] == num_features
+        )
+        assert (
+            data[1].shape[0] == num_observations * 0.3 and data[1].shape[1] == num_features
+        )
+        assert (
+            data[2].shape[0] == num_observations * (1 - 0.3)
+            and data[2].shape[1] == num_outputs
+        )
+        assert (
+            data[3].shape[0] == num_observations * 0.3 and data[3].shape[1] == num_outputs
+        )
+    
+        # ===========================================================================
+        # Model initialization
+        model_settings = {
+            "models": ["Linear", "SVM", "Lasso", "DT", "KN", "RF"],
+        }
+        tuning = mai.Tuner(data[0], data[2], model_settings=model_settings)
+    
+        # ===========================================================================
+        # Hyper-parameter tuning
+        grid_search_spaces = {
+            "Linear": {"fit_intercept": [True, False]},
+            "Lasso": {"alpha": np.linspace(0.000001, 1, 200)},
+            "DT": {
+                "max_depth": [None, 5, 10, 25, 50],
+                "max_features": [None, "sqrt", "log2", 0.2, 0.4, 0.6, 0.8, 1],
+                "min_samples_leaf": [1, 2, 4, 6, 8, 10],
+                "min_samples_split": [2, 4, 6, 8, 10],
+            },
+            "SVM": {
+                "kernel": ["linear", "rbf", "poly"],
+                "epsilon": [0.01, 0.1, 1],
+                "gamma": ["scale", "auto"],
+            },
+            "RF": {
+                "n_estimators": [50, 100, 150],
+                "criterion": ["squared_error", "absolute_error"],
+                "min_samples_split": [2, 4],
+                "max_features": [None, "sqrt", "log2", 1],
+            },
+            "KN": {
+                "n_neighbors": [1, 2, 4, 6, 8, 10, 14, 17, 20],
+                "weights": ["uniform", "distance"],
+                "leaf_size": [1, 5, 10, 15, 20, 25, 30],
+            },
+        }
+        grid_search_configs = tuning.grid_search(
+            param_spaces=grid_search_spaces,
+            models=grid_search_spaces.keys(),
+            cv=ShuffleSplit(
+                n_splits=1, test_size=0.15, random_state=global_settings.random_state
+            ),
+        )
+    
+        # ===========================================================================
+        # Model post-processing
+        postprocessor = mai.PostProcessor(
+            data=data,
+            model_configs=[grid_search_configs],
+        )
+        metrics = postprocessor.metrics(metrics={"MSE": mean_squared_error})[
+            [
+                "Model Types",
+                "Train MAE",
+                "Train MSE",
+                "Train RMSE",
+                "Train R2",
+                "Test MAE",
+                "Test MSE",
+                "Test RMSE",
+                "Test R2",
+            ]
+        ]
+    
+        # Assert expected dataframe and results match
+        print(
+            "Expected Values\n",
+            expected_metrics.sort_values(by=["Test R2"], ascending=False),
+        )
+        print("pyMAISE Values\n", metrics)
+>       pd.testing.assert_frame_equal(
+            expected_metrics.sort_values(by=["Test R2"], ascending=False), metrics
+        )
+
+tests/regression/classical_models/test_reactor_physics.py:142: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+pandas/_libs/testing.pyx:53: in pandas._libs.testing.assert_almost_equal
+    ???
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+>   ???
+E   AssertionError: DataFrame.iloc[:, 1] (column name="Train MAE") are different
+E   
+E   DataFrame.iloc[:, 1] (column name="Train MAE") values are different (16.66667 %)
+E   [index]: [0, 1, 3, 4, 5, 2]
+E   [left]:  [0.0010885028698925, 0.0010885798974279, 0.0032630181443765, 0.0160718834978461, 0.0, 0.0]
+E   [right]: [0.0010885028698925212, 0.0010885798974279374, 0.003263018144376584, 0.015490590745559578, 0.0, 0.0]
+E   At positional index 3, first diff: 0.0160718834978461 != 0.015490590745559578
+
+pandas/_libs/testing.pyx:171: AssertionError
+----------------------------- Captured stdout call -----------------------------
+Reading data from /home/lionturkey/projects/pyMAISE/pyMAISE/datasets/xs.csv
+Hyperparameter tuning classical models with grid search
+  Tuning Linear
+Fitting 1 folds for each of 2 candidates, totalling 2 fits
+  Tuning Lasso
+Fitting 1 folds for each of 200 candidates, totalling 200 fits
+  Tuning DT
+Fitting 1 folds for each of 1200 candidates, totalling 1200 fits
+  Tuning SVM
+Fitting 1 folds for each of 18 candidates, totalling 18 fits
+[LibSVM]*
+optimization finished, #iter = 498
+obj = -0.740490, rho = -0.238290
+nSV = 14, nBSV = 2
+[LibSVM]*.*
+optimization finished, #iter = 1348
+obj = -1.365167, rho = -0.500480
+nSV = 227, nBSV = 0
+[LibSVM]...................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................*................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................*..................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................*........................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................*....................................................*
+optimization finished, #iter = 5599473
+obj = -7.510222, rho = -0.398552
+nSV = 427, nBSV = 313
+[LibSVM]*
+optimization finished, #iter = 498
+obj = -0.740490, rho = -0.238290
+nSV = 14, nBSV = 2
+[LibSVM]*
+optimization finished, #iter = 235
+obj = -3.251717, rho = -0.536507
+nSV = 44, nBSV = 23
+[LibSVM]*
+optimization finished, #iter = 304
+obj = -35.060225, rho = -0.428626
+nSV = 482, nBSV = 465
+[LibSVM]*
+optimization finished, #iter = 100
+obj = -0.428544, rho = -0.358242
+nSV = 8, nBSV = 0
+[LibSVM]*
+optimization finished, #iter = 65
+obj = -0.526995, rho = -0.502484
+nSV = 38, nBSV = 0
+[LibSVM]..*....*
+optimization finished, #iter = 6444
+obj = -0.002723, rho = -0.396027
+nSV = 32, nBSV = 0
+[LibSVM]*
+optimization finished, #iter = 100
+obj = -0.428544, rho = -0.358242
+nSV = 8, nBSV = 0
+[LibSVM]*
+optimization finished, #iter = 35
+obj = -1.810669, rho = -0.514881
+nSV = 15, nBSV = 7
+[LibSVM]*
+optimization finished, #iter = 81
+obj = -13.826981, rho = -0.450756
+nSV = 123, nBSV = 115
+[LibSVM]*
+optimization finished, #iter = 0
+obj = 0.000000, rho = -0.500000
+nSV = 0, nBSV = 0
+[LibSVM]*
+optimization finished, #iter = 0
+obj = 0.000000, rho = -0.500000
+nSV = 0, nBSV = 0
+[LibSVM]*
+optimization finished, #iter = 0
+obj = 0.000000, rho = -0.500000
+nSV = 0, nBSV = 0
+[LibSVM]*
+optimization finished, #iter = 0
+obj = 0.000000, rho = -0.500000
+nSV = 0, nBSV = 0
+[LibSVM]*
+optimization finished, #iter = 0
+obj = 0.000000, rho = -0.500000
+nSV = 0, nBSV = 0
+[LibSVM]*
+optimization finished, #iter = 0
+obj = 0.000000, rho = -0.500000
+nSV = 0, nBSV = 0
+[LibSVM]*
+optimization finished, #iter = 520
+obj = -0.740622, rho = -0.237660
+nSV = 14, nBSV = 1
+  Tuning RF
+Fitting 1 folds for each of 48 candidates, totalling 48 fits
+  Tuning KN
+Fitting 1 folds for each of 126 candidates, totalling 126 fits
+[LibSVM]*
+optimization finished, #iter = 520
+obj = -0.740622, rho = -0.237660
+nSV = 14, nBSV = 1
+Expected Values
+   Model Types  Train MAE  Train MSE  ...  Test MSE  Test RMSE   Test R2
+0      Linear   0.001089   0.000002  ...  0.000003   0.001700  0.999924
+1       Lasso   0.001089   0.000002  ...  0.000003   0.001701  0.999924
+3         SVM   0.003263   0.000017  ...  0.000017   0.004164  0.999542
+4          RF   0.016072   0.000466  ...  0.003312   0.057547  0.912611
+5          KN   0.000000   0.000000  ...  0.005060   0.071133  0.866477
+2          DT   0.000000   0.000000  ...  0.009251   0.096181  0.755884
+
+[6 rows x 9 columns]
+pyMAISE Values
+   Model Types  Train MAE  Train MSE  ...  Test MSE  Test RMSE   Test R2
+0      Linear   0.001089   0.000002  ...  0.000003   0.001700  0.999924
+1       Lasso   0.001089   0.000002  ...  0.000003   0.001701  0.999924
+3         SVM   0.003263   0.000017  ...  0.000017   0.004164  0.999542
+4          RF   0.015491   0.000414  ...  0.003143   0.056059  0.917071
+5          KN   0.000000   0.000000  ...  0.005060   0.071133  0.866477
+2          DT   0.000000   0.000000  ...  0.009251   0.096181  0.755884
+
+[6 rows x 9 columns]
+----------------------------- Captured stderr call -----------------------------
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.1s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    0.1s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.1s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    0.2s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.1s
+[Parallel(n_jobs=1)]: Done 150 out of 150 | elapsed:    0.3s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 150 out of 150 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.1s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    0.1s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.1s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    0.2s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.1s
+[Parallel(n_jobs=1)]: Done 150 out of 150 | elapsed:    0.3s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 150 out of 150 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    0.1s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    0.1s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.1s
+[Parallel(n_jobs=1)]: Done 150 out of 150 | elapsed:    0.2s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 150 out of 150 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    0.1s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 150 out of 150 | elapsed:    0.1s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 150 out of 150 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.1s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    0.1s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.1s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    0.1s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.1s
+[Parallel(n_jobs=1)]: Done 150 out of 150 | elapsed:    0.2s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 150 out of 150 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.1s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    0.1s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.1s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    0.1s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.1s
+[Parallel(n_jobs=1)]: Done 150 out of 150 | elapsed:    0.2s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 150 out of 150 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    0.1s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.1s
+[Parallel(n_jobs=1)]: Done 150 out of 150 | elapsed:    0.2s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 150 out of 150 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    0.1s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 150 out of 150 | elapsed:    0.1s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 150 out of 150 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.3s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    0.3s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.3s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    0.6s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.3s
+[Parallel(n_jobs=1)]: Done 150 out of 150 | elapsed:    0.9s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 150 out of 150 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.2s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    0.3s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.2s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    0.5s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.3s
+[Parallel(n_jobs=1)]: Done 150 out of 150 | elapsed:    0.8s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 150 out of 150 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.1s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    0.1s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.2s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    0.3s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.1s
+[Parallel(n_jobs=1)]: Done 150 out of 150 | elapsed:    0.4s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 150 out of 150 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.1s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    0.1s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.1s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    0.3s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.1s
+[Parallel(n_jobs=1)]: Done 150 out of 150 | elapsed:    0.4s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 150 out of 150 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.1s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    0.2s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.1s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    0.3s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.2s
+[Parallel(n_jobs=1)]: Done 150 out of 150 | elapsed:    0.5s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 150 out of 150 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.1s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    0.1s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.1s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    0.3s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.1s
+[Parallel(n_jobs=1)]: Done 150 out of 150 | elapsed:    0.4s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 150 out of 150 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.1s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    0.1s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.1s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    0.2s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.1s
+[Parallel(n_jobs=1)]: Done 150 out of 150 | elapsed:    0.3s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 150 out of 150 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.1s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    0.1s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.1s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    0.2s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 100 out of 100 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.1s
+[Parallel(n_jobs=1)]: Done 150 out of 150 | elapsed:    0.3s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done 150 out of 150 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.4s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    0.4s finished
+
+  0%|          | 0/6 [00:00<?, ?it/s]
+Linear:  17%|█▋        | 1/6 [00:00<00:00, 14217.98it/s]
+Lasso:  33%|███▎      | 2/6 [00:00<00:00, 1713.01it/s]  
+DT:  50%|█████     | 3/6 [00:00<00:00, 1237.74it/s]   
+SVM:  67%|██████▋   | 4/6 [00:00<00:00, 773.25it/s]
+RF:  83%|████████▎ | 5/6 [00:00<00:00, 483.79it/s] [Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.3s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    0.3s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    0.0s finished
+[Parallel(n_jobs=1)]: Done  49 tasks      | elapsed:    0.0s
+[Parallel(n_jobs=1)]: Done  50 out of  50 | elapsed:    0.0s finished
+
+KN: 100%|██████████| 6/6 [00:00<00:00, 16.86it/s] 
+KN: 100%|██████████| 6/6 [00:00<00:00, 15.52it/s]
+____________________________ test_new_nn_structure _____________________________
+
+    def test_new_nn_structure():
+        plus_minus = 0.02
+    
+        # Loop over each base benchmark data set
+        load_functions = [load_MITR, load_fp, load_xs]
+    
+        for load_function in load_functions:
+            # ======================================================================
+            # Old Model Structure
+            global_settings = mai.init(
+                problem_type=mai.ProblemType.REGRESSION,
+                verbosity=1,
+                random_state=42,
+                num_configs_saved=1,
+                cuda_visible_devices="-1",
+                new_nn_architecture=False,
+            )
+    
+            # Get data
+            data, inputs, outputs = load_function()
+    
+            # Train test split
+            xtrain, xtest, ytrain, ytest = train_test_split(
+                data=[inputs, outputs], test_size=0.3
+            )
+            xtrain, xtest, _ = scale_data(xtrain, xtest, MinMaxScaler())
+            ytrain, ytest, yscaler = scale_data(ytrain, ytest, MinMaxScaler())
+            data = (xtrain, xtest, ytrain, ytest)
+    
+            # Old NN model settings
+            model_settings = {
+                "models": ["nn"],
+                "nn": {
+                    # Sequential
+                    "num_layers": 2,
+                    "dropout": True,
+                    "rate": 0.5,
+                    "validation_split": 0.15,
+                    "loss": "mean_absolute_error",
+                    "metrics": ["mean_absolute_error"],
+                    "batch_size": 16,
+                    "epochs": 50,
+                    # Starting Layer
+                    "start_num_nodes": 100,
+                    "start_kernel_initializer": "normal",
+                    "start_activation": "relu",
+                    "input_dim": xtrain.shape[1],  # Number of inputs
+                    # Middle Layers
+                    "mid_num_node_strategy": "constant",
+                    "mid_kernel_initializer": "normal",
+                    "mid_activation": "relu",
+                    # Ending Layer
+                    "end_num_nodes": ytrain.shape[1],  # Number of outputs
+                    "end_activation": "linear",
+                    "end_kernel_initializer": "normal",
+                    # Optimizer
+                    "optimizer": "adam",
+                    "learning_rate": 0.0001,
+                },
+            }
+            tuning = mai.Tuner(data[0], data[2], model_settings=model_settings)
+    
+            # Grid search space
+            grid_search_space = {
+                "nn": {
+                    # Sequantial
+                    "batch_size": [8, 128],
+                    # Starting Layer
+                    "start_num_nodes": [100, 400],
+                    # Optimizer
+                    "learning_rate": [0.0001, 0.001],
+                }
+            }
+    
+            # Grid search
+>           grid_search_configs = tuning.grid_search(
+                param_spaces=grid_search_space,
+                models=grid_search_space.keys(),
+                cv=ShuffleSplit(
+                    n_splits=2, test_size=0.15, random_state=global_settings.random_state
+                ),
+            )
+
+tests/regression/nn/test_new_nn_structure.py:84: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+pyMAISE/tuner.py:417: in grid_search
+    return self._run_search(
+pyMAISE/tuner.py:637: in _run_search
+    resulting_models = search.fit(xtrain, ytrain)
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib64/python3.12/site-packages/sklearn/base.py:1336: in wrapper
+    return fit_method(estimator, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib64/python3.12/site-packages/sklearn/model_selection/_search.py:1053: in fit
+    self._run_search(evaluate_candidates)
+.venv/lib64/python3.12/site-packages/sklearn/model_selection/_search.py:1612: in _run_search
+    evaluate_candidates(ParameterGrid(self.param_grid))
+.venv/lib64/python3.12/site-packages/sklearn/model_selection/_search.py:1030: in evaluate_candidates
+    _warn_or_raise_about_fit_failures(out, self.error_score)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+results = [{'fit_error': 'Traceback (most recent call last):\n  File "/home/lionturkey/projects/pyMAISE/.venv/lib64/python3.12/s... Did you mean: \'compile\'?\n', 'fit_time': 0.0017573833465576172, 'n_test_samples': 105, 'score_time': 0.0, ...}, ...]
+error_score = nan
+
+    def _warn_or_raise_about_fit_failures(results, error_score):
+        fit_errors = [
+            result["fit_error"] for result in results if result["fit_error"] is not None
+        ]
+        if fit_errors:
+            num_failed_fits = len(fit_errors)
+            num_fits = len(results)
+            fit_errors_counter = Counter(fit_errors)
+            delimiter = "-" * 80 + "\n"
+            fit_errors_summary = "\n".join(
+                f"{delimiter}{n} fits failed with the following error:\n{error}"
+                for error, n in fit_errors_counter.items()
+            )
+    
+            if num_failed_fits == num_fits:
+                all_fits_failed_message = (
+                    f"\nAll the {num_fits} fits failed.\n"
+                    "It is very likely that your model is misconfigured.\n"
+                    "You can try to debug the error by setting error_score='raise'.\n\n"
+                    f"Below are more details about the failures:\n{fit_errors_summary}"
+                )
+>               raise ValueError(all_fits_failed_message)
+E               ValueError: 
+E               All the 16 fits failed.
+E               It is very likely that your model is misconfigured.
+E               You can try to debug the error by setting error_score='raise'.
+E               
+E               Below are more details about the failures:
+E               --------------------------------------------------------------------------------
+E               16 fits failed with the following error:
+E               Traceback (most recent call last):
+E                 File "/home/lionturkey/projects/pyMAISE/.venv/lib64/python3.12/site-packages/sklearn/model_selection/_validation.py", line 833, in _fit_and_score
+E                   estimator.fit(X_train, y_train, **fit_params)
+E                 File "/home/lionturkey/projects/pyMAISE/pyMAISE/methods/_nn_wrapper.py", line 167, in fit
+E                   return self._model.fit(X, y)
+E                          ^^^^^^^^^^^^^^^^^^^^^
+E                 File "/home/lionturkey/projects/pyMAISE/.venv/lib64/python3.12/site-packages/scikeras/wrappers.py", line 770, in fit
+E                   self._fit(
+E                 File "/home/lionturkey/projects/pyMAISE/.venv/lib64/python3.12/site-packages/scikeras/wrappers.py", line 928, in _fit
+E                   self._ensure_compiled_model()
+E                 File "/home/lionturkey/projects/pyMAISE/.venv/lib64/python3.12/site-packages/scikeras/wrappers.py", line 439, in _ensure_compiled_model
+E                   if not self.model_.compiled:
+E                          ^^^^^^^^^^^^^^^^^^^^
+E               AttributeError: 'Sequential' object has no attribute 'compiled'. Did you mean: 'compile'?
+
+.venv/lib64/python3.12/site-packages/sklearn/model_selection/_validation.py:479: ValueError
+----------------------------- Captured stdout call -----------------------------
+Reading data from ['/home/lionturkey/projects/pyMAISE/pyMAISE/datasets/crx.csv', '/home/lionturkey/projects/pyMAISE/pyMAISE/datasets/powery.csv']
+Hyperparameter tuning classical models with grid search
+  Tuning nn
+Fitting 2 folds for each of 8 candidates, totalling 16 fits
+=============================== warnings summary ===============================
+.venv/lib64/python3.12/site-packages/tensorflow_probability/python/__init__.py:57
+  /home/lionturkey/projects/pyMAISE/.venv/lib64/python3.12/site-packages/tensorflow_probability/python/__init__.py:57: DeprecationWarning: distutils Version classes are deprecated. Use packaging.version instead.
+    if (distutils.version.LooseVersion(tf.__version__) <
+
+.venv/lib64/python3.12/site-packages/tensorflow_probability/python/__init__.py:58
+  /home/lionturkey/projects/pyMAISE/.venv/lib64/python3.12/site-packages/tensorflow_probability/python/__init__.py:58: DeprecationWarning: distutils Version classes are deprecated. Use packaging.version instead.
+    distutils.version.LooseVersion(required_tensorflow_version)):
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+============================================================================= short test summary info =============================================================================
+FAILED tests/regression/classical_models/test_classification.py::test_classification - assert np.float64(0.9555555555555556) == 1.0 ± 1.0e-04
+FAILED tests/regression/classical_models/test_mitr.py::test_mitr - AssertionError: DataFrame.iloc[:, 1] (column name="Train MAE") are different
+FAILED tests/regression/classical_models/test_reactor_physics.py::test_reactor_physics - AssertionError: DataFrame.iloc[:, 1] (column name="Train MAE") are different
+FAILED tests/regression/nn/test_new_nn_structure.py::test_new_nn_structure - ValueError: 
+============================================================== 4 failed, 23 passed, 2 warnings in 707.36s (0:11:47) ===============================================================
