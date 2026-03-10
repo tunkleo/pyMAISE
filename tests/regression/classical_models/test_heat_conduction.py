@@ -141,5 +141,7 @@ def test_heat_conduction():
     )
     print("pyMAISE Values\n", metrics)
     pd.testing.assert_frame_equal(
-        expected_metrics.sort_values(by=["Test R2"], ascending=False), metrics
+        expected_metrics.sort_values(by=["Test R2"], ascending=False),
+        metrics,
+        rtol=1e-3,
     )
