@@ -929,6 +929,121 @@ class PostProcessor:
 
         return ax
 
+    def variational_parity_plot(
+        self,
+        ax=None,
+        y=None,
+        idx=None,
+        model_type=None,
+        sort_by=None,
+        direction=None,
+    ):
+        """
+        Create a parity plot with epistemic uncertainty bands for a variational model.
+
+        Points are sorted by true value so the ``fill_between`` CI bands render
+        without crossing.  The scatter overlay uses unsorted order so the dots
+        are not misleadingly sequential.
+
+        Parameters
+        ----------
+        ax: matplotlib.pyplot.axis or None, default=None
+            If not given, then an axis is created.
+        y: single or list of int or str or None, default=None
+            The output to plot. If ``None`` then all outputs are plotted.
+        idx: int or None, default=None
+            The index in the :meth:`pyMAISE.PostProcessor.metrics` pandas.DataFrame.
+            If ``None``, then ``sort_by`` is used.
+        model_type: str or None, default=None
+            The model name to get.
+        sort_by: str or None, default=None
+            The metric to sort by. Defaults to ``test r2_score``.
+        direction: 'min', 'max', or None, default=None
+            Required only when ``sort_by`` is not a default metric.
+
+        Returns
+        -------
+        ax: matplotlib.pyplot.axis
+            The plot.
+
+        Raises
+        ------
+        ValueError
+            If the selected model has no MC samples (i.e. is not variational).
+        """
+        idx = self._get_idx(
+            idx=idx, model_type=model_type, sort_by=sort_by, direction=direction
+        )
+
+        samples = self._models["MC Samples"][idx]
+        if samples is None:
+            raise ValueError(
+                f"Model at index {idx} has no MC samples. "
+                "variational_parity_plot requires a variational model."
+            )
+
+        if not isinstance(y, list):
+            y = [y] if y is not None else list(range(self._ytest.shape[-1]))
+
+        if ax is None:
+            ax = plt.gca()
+
+        ytest = self._ytest.values
+        if self._yscaler is not None:
+            ytest = self._yscaler.inverse_transform(ytest.reshape(-1, ytest.shape[-1]))
+
+        # samples is already inverse-scaled: (n_mc, n_test, n_outputs)
+        mean_pred = samples.mean(axis=0)  # (n_test, n_outputs)
+        std_pred = samples.std(axis=0)  # (n_test, n_outputs)
+
+        for y_idx in y:
+            if isinstance(y_idx, str):
+                y_idx = np.where(
+                    self._ytest.coords[self._ytest.dims[-1]].to_numpy() == y_idx
+                )[0]
+
+            true = ytest[..., y_idx]
+            mean = mean_pred[..., y_idx]
+            std = std_pred[..., y_idx]
+
+            sort_order = np.argsort(true)
+            true_s = true[sort_order]
+            mean_s = mean[sort_order]
+            std_s = std[sort_order]
+
+            ax.fill_between(
+                true_s,
+                mean_s - 1.96 * std_s,
+                mean_s + 1.96 * std_s,
+                alpha=0.15,
+                color="steelblue",
+                label="95% CI",
+            )
+            ax.fill_between(
+                true_s,
+                mean_s - 1.645 * std_s,
+                mean_s + 1.645 * std_s,
+                alpha=0.30,
+                color="steelblue",
+                label="90% CI",
+            )
+            ax.scatter(true, mean, c="r", marker="o", zorder=5, label="Mean prediction")
+
+        lims = [
+            np.min([ax.get_xlim(), ax.get_ylim()]),
+            np.max([ax.get_xlim(), ax.get_ylim()]),
+        ]
+
+        ax.plot(lims, lims, "k--", label="Perfect prediction")
+        ax.set_aspect("equal")
+        ax.set_xlim(lims)
+        ax.set_ylim(lims)
+        ax.legend()
+        ax.set_xlabel("Actual Outcome")
+        ax.set_ylabel("Predicted Outcome")
+
+        return ax
+
     def validation_plot(
         self,
         ax=None,
