@@ -244,3 +244,11 @@ class nnHyperModel(HyperModel):
             search_dict(d)
 
         return hps
+
+    @property
+    def is_variational(self):
+        """Return True if any layer in the architecture is a Variational layer."""
+        for key in self._structural_params.keys():
+            if re.search("Variational", key) is not None:
+                return True
+        return False

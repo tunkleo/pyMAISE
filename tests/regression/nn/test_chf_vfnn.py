@@ -76,24 +76,8 @@ def test_chf_vfnn():
         cv=TimeSeriesSplit(n_splits=2),
     )
 
-    # TODO: figure out why vFNN ain't working
-    # assert isinstance(grid_search_configs["rnn"][0], pd.DataFrame)
-    # assert isinstance(grid_search_configs["rnn"][1], nnHyperModel)
-    # assert grid_search_configs["rnn"][0].shape == (2, 1)
-    # assert tuner.cv_performance_data["rnn"].shape == (2, 2)
-
-    # # Model post-processing
-    # new_model_settings = {
-    #     "rnn": {
-    #         "fitting_params": {
-    #             "epochs": 10,
-    #         },
-    #     },
-    # }
-    # postprocessor = mai.PostProcessor(
-    #     data=split_data,
-    #     model_configs=[grid_search_configs],
-    #     new_model_settings=new_model_settings,
-    #     yscaler=yscaler,
-    # )
-    # assert postprocessor.metrics().shape == (2, 12)
+    assert isinstance(grid_search_configs["vfnn"][0], pd.DataFrame)
+    assert isinstance(grid_search_configs["vfnn"][1], nnHyperModel)
+    assert grid_search_configs["vfnn"][0].shape == (2, 1)
+    # Shape is (2, n_trials): row 0 = mean scores, row 1 = std scores
+    assert tuner.cv_performance_data["vfnn"].shape[0] == 2
