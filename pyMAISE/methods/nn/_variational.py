@@ -15,6 +15,22 @@ class VariationalLayer(Layer):
         # Get layer data from params dictionary
         self._data = super().build_data(self._data, parameters)
 
+        # kl_weight scales the KL divergence term relative to the MSE loss.
+        # The correct ELBO formulation is: loss = MSE + (1/n_train) * KL.
+        # Because Keras adds model.losses (the KL sum) directly to the
+        # per-batch mean MSE, kl_weight should be set to 1/n_train so the
+        # two terms are on the same scale.  Defaults to 1.0 (unscaled) for
+        # backwards compatibility, but users should pass kl_weight in the
+        # Variational_output params dict.
+        kl_weight = parameters.get("kl_weight", 1.0)
+        if kl_weight != 1.0:
+            self._data["kernel_divergence_fn"] = (
+                lambda q, p, ignore, w=kl_weight: kl_lib.kl_divergence(q, p) * w
+            )
+            self._data["bias_divergence_fn"] = (
+                lambda q, p, ignore, w=kl_weight: kl_lib.kl_divergence(q, p) * w
+            )
+
         # Assert keras non-default variables are defined
         assert self._data["units"] is not None
 
