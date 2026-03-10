@@ -54,9 +54,11 @@ class PostProcessor:
         model_configs,
         new_model_settings=None,
         yscaler=None,
+        n_mc_samples=200,
     ):
         # Extract data
         self._xtrain, self._xtest, self._ytrain, self._ytest = data
+        self._n_mc_samples = n_mc_samples
 
         # Initialize lists
         model_types = []
@@ -108,7 +110,7 @@ class PostProcessor:
 
         # Fit each model to training data and get predicted training
         # and testing from each model
-        yhat_train, yhat_test, histories = self._fit()
+        yhat_train, yhat_test, histories, mc_samples = self._fit()
 
         # Scale predicted data if scaler is given
         self._yscaler = yscaler
@@ -116,6 +118,17 @@ class PostProcessor:
             for i in range(len(yhat_train)):
                 yhat_train[i] = self._yscaler.inverse_transform(yhat_train[i])
                 yhat_test[i] = self._yscaler.inverse_transform(yhat_test[i])
+            for i in range(len(mc_samples)):
+                if mc_samples[i] is not None:
+                    samples = mc_samples[i]  # (n_mc, n_test, n_outputs)
+                    mc_samples[i] = np.stack(
+                        [
+                            self._yscaler.inverse_transform(
+                                samples[j].reshape(-1, samples.shape[-1])
+                            )
+                            for j in range(samples.shape[0])
+                        ]
+                    )
 
         # Create pandas.DataFrame
         self._models = pd.concat(
@@ -126,6 +139,7 @@ class PostProcessor:
                         "Train Yhat": yhat_train,
                         "Test Yhat": yhat_test,
                         "History": histories,
+                        "MC Samples": mc_samples,
                     }
                 ),
             ],
@@ -156,6 +170,7 @@ class PostProcessor:
         yhat_train = []
         yhat_test = []
         histories = []
+        mc_samples = []
 
         # Progress bar
         p = tqdm(
@@ -218,17 +233,47 @@ class PostProcessor:
                         .model.history.history
                     )
                     if settings.values.problem_type == settings.ProblemType.REGRESSION:
-                        # Append training and testing predictions
-                        yhat_train.append(
-                            regressor.predict(
-                                self._xtrain, verbose=settings.values.verbosity
-                            ).reshape(-1, self._ytrain.shape[-1])
+                        model_wrapper = self._models["Model Wrappers"][i]
+                        is_var = (
+                            hasattr(model_wrapper, "is_variational")
+                            and model_wrapper.is_variational
                         )
-                        yhat_test.append(
-                            regressor.predict(
-                                self._xtest, verbose=settings.values.verbosity
-                            ).reshape(-1, self._ytest.shape[-1])
-                        )
+                        if is_var:
+                            # Run n_mc_samples stochastic forward passes and
+                            # store raw samples; use mean as the point prediction
+                            # so existing metrics work unchanged.
+                            n = self._n_mc_samples
+                            train_s = np.stack(
+                                [
+                                    regressor.predict(
+                                        self._xtrain.values, verbose=0
+                                    ).reshape(-1, self._ytrain.shape[-1])
+                                    for _ in range(n)
+                                ]
+                            )  # (n_mc, n_train, n_outputs)
+                            test_s = np.stack(
+                                [
+                                    regressor.predict(
+                                        self._xtest.values, verbose=0
+                                    ).reshape(-1, self._ytest.shape[-1])
+                                    for _ in range(n)
+                                ]
+                            )  # (n_mc, n_test, n_outputs)
+                            yhat_train.append(train_s.mean(axis=0))
+                            yhat_test.append(test_s.mean(axis=0))
+                            mc_samples.append(test_s)
+                        else:
+                            yhat_train.append(
+                                regressor.predict(
+                                    self._xtrain, verbose=settings.values.verbosity
+                                ).reshape(-1, self._ytrain.shape[-1])
+                            )
+                            yhat_test.append(
+                                regressor.predict(
+                                    self._xtest, verbose=settings.values.verbosity
+                                ).reshape(-1, self._ytest.shape[-1])
+                            )
+                            mc_samples.append(None)
                         continue
 
                     else:
@@ -251,17 +296,19 @@ class PostProcessor:
                                 self._ytest.values,
                             ).reshape(-1, self._ytest.shape[-1])
                         )
+                        mc_samples.append(None)
                         continue
 
-            # Append training and testing predictions
+            # Append training and testing predictions (classical / old-arch path)
             yhat_train.append(
                 regressor.predict(self._xtrain).reshape(-1, self._ytrain.shape[-1])
             )
             yhat_test.append(
                 regressor.predict(self._xtest).reshape(-1, self._ytest.shape[-1])
             )
+            mc_samples.append(None)
 
-        return (yhat_train, yhat_test, histories)
+        return (yhat_train, yhat_test, histories, mc_samples)
 
     def metrics(
         self, y=None, model_type=None, metrics=None, sort_by=None, direction=None
