@@ -1,12 +1,16 @@
+import matplotlib
+import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
 from sklearn.model_selection import TimeSeriesSplit
 from sklearn.preprocessing import MinMaxScaler
 
 import pyMAISE as mai
-from pyMAISE.datasets import load_loca, load_chf
+from pyMAISE.datasets import load_chf
 from pyMAISE.methods import nnHyperModel
-from pyMAISE.preprocessing import SplitSequence, scale_data, train_test_split
-# from tensorflow_probability.python.layers import DenseVariational
+from pyMAISE.preprocessing import scale_data
+
+matplotlib.use("Agg")  # non-interactive backend for CI
 
 
 def test_chf_vfnn():
@@ -81,3 +85,37 @@ def test_chf_vfnn():
     assert grid_search_configs["vfnn"][0].shape == (2, 1)
     # Shape is (2, n_trials): row 0 = mean scores, row 1 = std scores
     assert tuner.cv_performance_data["vfnn"].shape[0] == 2
+
+    # ---- PostProcessor -------------------------------------------------------
+    # Use a small n_mc_samples so the test stays fast
+    postprocessor = mai.PostProcessor(
+        data=split_data,
+        model_configs=[grid_search_configs],
+        yscaler=yscaler,
+        n_mc_samples=20,
+    )
+
+    metrics = postprocessor.metrics()
+    # 2 saved configs × (train + test) × 5 default regression metrics = 10 cols + 2 names
+    assert metrics.shape == (2, 12)
+
+    # MC Samples column should be populated for both saved configs
+    for i in range(2):
+        samples = postprocessor._models["MC Samples"][i]
+        assert samples is not None
+        assert samples.shape == (20, 500, 1)  # (n_mc, n_test, n_outputs)
+        assert not np.all(samples[0] == samples[1])  # samples must differ across draws
+
+    # ---- Variational parity plot ---------------------------------------------
+    fig, ax = plt.subplots()
+    ax = postprocessor.variational_parity_plot(ax=ax, idx=0)
+    assert ax is not None
+    plt.close(fig)
+
+    # Calling on a non-variational model index should raise ValueError.
+    # (We only have variational models in this test, so verify the plot
+    #  works for both saved configs instead.)
+    fig, ax = plt.subplots()
+    ax = postprocessor.variational_parity_plot(ax=ax, idx=1)
+    assert ax is not None
+    plt.close(fig)
