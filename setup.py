@@ -6,18 +6,18 @@ from setuptools import find_packages, setup
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 warnings.filterwarnings("ignore", message=r"Passing", category=FutureWarning)
 
-if sys.version_info < (3, 9) or sys.version_info >= (3, 13):
-    sys.exit("pyMAISE only supports python>=3.9 and python<=3.12")
-    # TODO: look into whether it should be 3.12...
+if sys.version_info < (3, 10) or sys.version_info >= (3, 13):
+    sys.exit("pyMAISE only supports python>=3.10 and python<=3.12")
 
 # Get version from pyMAISE/__init__.py (always last line)
 with open("pyMAISE/__init__.py") as f:
     version = f.readlines()[-1].split()[-1][1:-1]
 
 setup(
-    name="pyMAISE",
+    name="pymaise-dev",
     version=version,
     packages=find_packages(include=["pyMAISE", "pyMAISE.*"]),
+    python_requires=">=3.10,<3.13",
     install_requires=[
         "pandas",
         "numpy",
@@ -65,9 +65,8 @@ setup(
     license="Apache 2.0",
     classifiers=[
         "License :: OSI Approved :: MIT License",
-        "Programming Language :: Python :: 3.12",
-        "Programming Language :: Python :: 3.11",
         "Programming Language :: Python :: 3.10",
-        "Programming Language :: Python :: 3.9",
+        "Programming Language :: Python :: 3.11",
+        "Programming Language :: Python :: 3.12",
     ],
 )
