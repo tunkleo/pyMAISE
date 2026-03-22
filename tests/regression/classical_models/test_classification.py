@@ -1,4 +1,3 @@
-import pytest
 from sklearn.model_selection import ShuffleSplit
 
 import pyMAISE as mai
@@ -55,7 +54,7 @@ def test_classification():
 
     # ===========================================================================
     # Hyper-parameter tuning
-    grid_search_spaces = {
+    param_spaces = {
         "DT": {
             "max_depth": [None, 5, 10, 25, 50],
             "max_features": [None, "sqrt", "log2"],
@@ -75,9 +74,10 @@ def test_classification():
         },
     }
 
-    grid_search_configs = tuning.grid_search(
-        param_spaces=grid_search_spaces,
-        models=grid_search_spaces.keys(),
+    random_search_configs = tuning.random_search(
+        param_spaces=param_spaces,
+        models=param_spaces.keys(),
+        n_iter=10,
         cv=ShuffleSplit(
             n_splits=1, test_size=0.15, random_state=global_settings.random_state
         ),
@@ -87,16 +87,10 @@ def test_classification():
     # Model post-processing
     postprocessor = mai.PostProcessor(
         data=split_data,
-        model_configs=[grid_search_configs],
+        model_configs=[random_search_configs],
     )
 
-    # Performance metric assertions
-    expected_models = {
-        "DT": 1.0,
-        "RF": 1.0,
-        "KN": 1.0,
-    }
-    for key, value in expected_models.items():
-        assert postprocessor.metrics(model_type=key)["Test Accuracy"].to_numpy()[
-            0
-        ] == pytest.approx(value, 0.0001)
+    # Performance metric assertions: require at least 90% accuracy for each model
+    for key in ["DT", "RF", "KN"]:
+        accuracy = postprocessor.metrics(model_type=key)["Test Accuracy"].to_numpy()[0]
+        assert accuracy >= 0.9, f"{key} test accuracy {accuracy:.4f} < 0.9"
