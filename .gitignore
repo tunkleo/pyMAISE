@@ -1,6 +1,7 @@
 # Directories
 best_hp/
 stubs/
+experiments/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

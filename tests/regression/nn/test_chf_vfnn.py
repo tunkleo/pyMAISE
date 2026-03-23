@@ -42,6 +42,10 @@ def test_chf_vfnn():
     assert split_data[3].shape == (500, 1)
     # print(inputs.shape)
 
+    # Scale KL divergence to match the per-sample MSE loss.
+    # Without this the KL term dominates and the network cannot learn.
+    kl_weight = 1.0 / xtrain.shape[0]
+
     # vFNN model settings
     structural = {
         "Dense_input": {
@@ -51,10 +55,11 @@ def test_chf_vfnn():
         "Dense_hidden1": {
             "units": mai.Choice([50, 100]),
             "activation": "tanh",
-         },
+        },
         "Variational_output": {
             "units": 1,
             "activation": "linear",
+            "kl_weight": kl_weight,
         },
     }
     model_settings = {
@@ -69,7 +74,7 @@ def test_chf_vfnn():
                 "loss": "mean_squared_error",
                 "metrics": ["mean_squared_error"],
             },
-            "fitting_params": {"batch_size": 16, "epochs": 5, "validation_split": 0.15},
+            "fitting_params": {"batch_size": 32, "epochs": 30, "validation_split": 0.15},
         },
     }
     tuner = mai.Tuner(xtrain, ytrain, model_settings=model_settings)
@@ -98,6 +103,12 @@ def test_chf_vfnn():
     metrics = postprocessor.metrics()
     # 2 saved configs × (train + test) × 5 default regression metrics = 10 cols + 2 names
     assert metrics.shape == (2, 12)
+
+    # Both saved configs should show meaningful predictive skill on the test set
+    assert (metrics["Test R2"] > 0.4).all(), (
+        f"vFNN configs underperforming — check kl_weight scaling:\n"
+        f"{metrics[['Parameter Configurations', 'Test R2']]}"
+    )
 
     # MC Samples column should be populated for both saved configs
     for i in range(2):

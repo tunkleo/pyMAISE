@@ -22,8 +22,26 @@ class VariationalLayer(Layer):
         # two terms are on the same scale.  Defaults to 1.0 (unscaled) for
         # backwards compatibility, but users should pass kl_weight in the
         # Variational_output params dict.
+        #
+        # When kl_schedule is active, nnHyperModel injects a shared mutable
+        # list (_kl_weight_container) into the parameters dict.  The lambdas
+        # below capture that list by reference so that KLAnnealingCallback can
+        # update kl_weight_container[0] at each epoch and the change is
+        # immediately visible during the forward pass.  Python's deepcopy
+        # returns the same function object for lambdas, so the shared
+        # reference is preserved when _build_tree deepcopies the layer.
         kl_weight = parameters.get("kl_weight", 1.0)
-        if kl_weight != 1.0:
+        kl_weight_container = parameters.get("_kl_weight_container", None)
+
+        if kl_weight_container is not None:
+            # Dynamic schedule driven by KLAnnealingCallback
+            self._data["kernel_divergence_fn"] = (
+                lambda q, p, ignore, c=kl_weight_container: kl_lib.kl_divergence(q, p) * c[0]
+            )
+            self._data["bias_divergence_fn"] = (
+                lambda q, p, ignore, c=kl_weight_container: kl_lib.kl_divergence(q, p) * c[0]
+            )
+        elif kl_weight != 1.0:
             self._data["kernel_divergence_fn"] = (
                 lambda q, p, ignore, w=kl_weight: kl_lib.kl_divergence(q, p) * w
             )

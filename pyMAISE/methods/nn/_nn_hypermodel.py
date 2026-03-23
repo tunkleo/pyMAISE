@@ -1,6 +1,8 @@
 import copy
 import re
 
+import numpy as np
+import tensorflow as tf
 from keras_tuner import HyperModel
 from tensorflow.keras import Input
 from tensorflow.keras.models import Sequential
@@ -32,6 +34,66 @@ from pyMAISE.methods.nn._max_pooling_3d import MaxPooling3DLayer
 from pyMAISE.methods.nn._reshape import ReshapeLayer
 from pyMAISE.methods.nn._variational import VariationalLayer
 from pyMAISE.utils.hyperparameters import Choice, HyperParameters
+
+
+_KL_SUPPORTED_SCHEDULES = ("sigmoid_decay", "sigmoid_growth", "linear")
+
+
+class _KLAnnealingCallback(tf.keras.callbacks.Callback):
+    """Keras callback that updates the KL-divergence weight at the start of each epoch.
+
+    The weight is stored in a shared mutable list (``kl_weight_container``) that is
+    captured by the divergence-function lambdas inside every ``VariationalLayer``.
+    Updating ``kl_weight_container[0]`` therefore immediately changes the effective
+    KL weight used during the forward pass of the next batch.
+
+    Schedules
+    ---------
+    sigmoid_decay
+        KL weight starts near ``max_weight`` and decays to ``min_weight`` by
+        roughly 15 % of the way through training.  Matches the schedule used in
+        the reference viAL implementation.
+    sigmoid_growth
+        KL weight starts near ``min_weight`` and grows to ``max_weight`` by
+        roughly 70 % of the way through training (classic KL annealing).
+    linear
+        KL weight ramps linearly from ``min_weight`` to ``max_weight`` over all
+        epochs.
+
+    Parameters
+    ----------
+    kl_weight_container : list[float]
+        A one-element list shared with the variational-layer divergence functions.
+    schedule : str
+        One of ``_KL_SUPPORTED_SCHEDULES``.
+    total_epochs : int
+        Total number of training epochs (used to parameterise the schedule).
+    max_weight : float
+        Maximum / target KL weight (typically ``1 / n_train``).
+    min_weight : float, optional
+        Minimum KL weight.  Defaults to ``max_weight * 0.01``.
+    """
+
+    def __init__(self, kl_weight_container, schedule, total_epochs, max_weight, min_weight=None):
+        super().__init__()
+        self._container = kl_weight_container
+        self._schedule = schedule
+        self._n = total_epochs
+        self._max = max_weight
+        self._min = min_weight if min_weight is not None else max_weight * 0.01
+
+    def on_epoch_begin(self, epoch, logs=None):
+        self._container[0] = self._compute(epoch)
+
+    def _compute(self, epoch):
+        e, n = epoch, self._n
+        lo, hi = self._min, self._max
+        if self._schedule == "sigmoid_decay":
+            return hi / (1.0 + np.exp(2.0 * (e - 0.15 * n))) + lo
+        elif self._schedule == "sigmoid_growth":
+            return hi / (1.0 + np.exp(-2.0 * (e - 0.7 * n))) + lo
+        else:  # linear
+            return lo + (hi - lo) * min(e / max(n - 1, 1), 1.0)
 
 
 class nnHyperModel(HyperModel):
@@ -89,8 +151,29 @@ class nnHyperModel(HyperModel):
         # Model compilation hyperparameters
         self._compilation_params = parameters["compile_params"]
 
-        # Model fitting hyperparameters
-        self._fitting_params = parameters["fitting_params"]
+        # Model fitting hyperparameters — strip pyMAISE-specific KL schedule keys
+        # so they are never forwarded to model.fit() as unexpected kwargs.
+        raw_fitting = parameters["fitting_params"]
+        self._kl_schedule = raw_fitting.get("kl_schedule", None)
+        self._kl_schedule_min_weight = raw_fitting.get("kl_schedule_min_weight", None)
+        self._fitting_params = {
+            k: v
+            for k, v in raw_fitting.items()
+            if k not in ("kl_schedule", "kl_schedule_min_weight")
+        }
+
+        # When a KL schedule is requested, create a shared mutable container
+        # that will be captured by VariationalLayer divergence-function lambdas
+        # and updated each epoch by KLAnnealingCallback.
+        if self._kl_schedule is not None:
+            if self._kl_schedule not in _KL_SUPPORTED_SCHEDULES:
+                raise ValueError(
+                    f"Unknown kl_schedule {self._kl_schedule!r}. "
+                    f"Choose from {_KL_SUPPORTED_SCHEDULES}."
+                )
+            self._kl_weight_container = [self._find_base_kl_weight(parameters["structural_params"])]
+        else:
+            self._kl_weight_container = None
 
         # Input data shape
         self._input_shape = input_shape
@@ -151,10 +234,24 @@ class nnHyperModel(HyperModel):
             if isinstance(value, HyperParameters):
                 fitting_params[key] = value.hp(hp, key)
 
+        callbacks = list(kwargs.pop("callbacks", None) or [])
+        if self._kl_schedule is not None and self._kl_weight_container is not None:
+            epochs = fitting_params.get("epochs", 100)
+            callbacks.append(
+                _KLAnnealingCallback(
+                    kl_weight_container=self._kl_weight_container,
+                    schedule=self._kl_schedule,
+                    total_epochs=epochs,
+                    max_weight=self._find_base_kl_weight(self._structural_params),
+                    min_weight=self._kl_schedule_min_weight,
+                )
+            )
+
         return model.fit(
             x,
             y,
             **fitting_params,
+            callbacks=callbacks if callbacks else None,
             verbose=settings.values.verbosity,
             **kwargs,
         )
@@ -196,10 +293,22 @@ class nnHyperModel(HyperModel):
                 position = match_idx.span()[0]
 
         if layer is not None:
+            if layer is VariationalLayer and self._kl_weight_container is not None:
+                # Inject the shared container so the divergence lambdas can be
+                # updated each epoch by KLAnnealingCallback.
+                structural_params = {**structural_params, "_kl_weight_container": self._kl_weight_container}
             return layer(layer_name, structural_params)
         else:
             # If not found we throw an error
             raise RuntimeError(f"Layer ({layer_name}) is not supported")
+
+    @staticmethod
+    def _find_base_kl_weight(structural_params):
+        """Return the kl_weight from the first Variational layer found, or 1.0."""
+        for layer_name, params in structural_params.items():
+            if re.search("Variational", layer_name):
+                return params.get("kl_weight", 1.0)
+        return 1.0
 
     def _get_optimizer(self, hp):
         # Get optimizer name
