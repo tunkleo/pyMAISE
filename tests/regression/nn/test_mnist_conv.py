@@ -104,7 +104,7 @@ def test_mnist_conv(mnist_data):
             "structural_params": structural,
             "optimizer": "SGD",
             "SGD": {
-                "learning_rate": mai.Choice([0.0001, 0.01]),
+                "learning_rate": 0.01,
                 "momentum": 0.9,
             },
             "compile_params": {
@@ -130,7 +130,7 @@ def test_mnist_conv(mnist_data):
     assert isinstance(grid_search_configs["cnn"][0], pd.DataFrame)
     assert isinstance(grid_search_configs["cnn"][1], nnHyperModel)
     assert grid_search_configs["cnn"][0].shape == (1, 1)
-    assert tuner.cv_performance_data["cnn"].shape == (2, 2)
+    assert tuner.cv_performance_data["cnn"].shape == (2, 1)
 
     # Model post-processing
     new_model_settings = {

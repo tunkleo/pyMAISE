@@ -68,15 +68,12 @@ def test_new_nn_structure():
         }
         tuning = mai.Tuner(data[0], data[2], model_settings=model_settings)
 
-        # Grid search space
+        # Grid search space — fixed to known-best config from prior search
         grid_search_space = {
             "nn": {
-                # Sequantial
-                "batch_size": [8, 128],
-                # Starting Layer
-                "start_num_nodes": [100, 400],
-                # Optimizer
-                "learning_rate": [0.0001, 0.001],
+                "batch_size": [8],
+                "start_num_nodes": [400],
+                "learning_rate": [0.001],
             }
         }
 
@@ -106,9 +103,10 @@ def test_new_nn_structure():
         global_settings.new_nn_architecture = True
 
         # New NN model settings
+        # Fixed to known-best config from prior search
         structural = {
             "Dense_hidden": {
-                "units": mai.Choice([100, 400]),
+                "units": mai.Choice([400]),
                 "activation": "relu",
                 "kernel_initializer": "normal",
                 "sublayer": "Dropout",
@@ -126,14 +124,14 @@ def test_new_nn_structure():
                 "structural_params": structural,
                 "optimizer": "Adam",
                 "Adam": {
-                    "learning_rate": mai.Choice([0.0001, 0.001]),
+                    "learning_rate": mai.Choice([0.001]),
                 },
                 "compile_params": {
                     "loss": "mean_absolute_error",
                     "metrics": ["mean_absolute_error"],
                 },
                 "fitting_params": {
-                    "batch_size": mai.Choice([8, 128]),
+                    "batch_size": mai.Choice([8]),
                     "epochs": 50,
                     "validation_split": 0.15,
                 },

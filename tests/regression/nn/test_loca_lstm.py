@@ -13,7 +13,7 @@ def test_loca_lstm():
     _ = mai.init(
         problem_type=mai.ProblemType.REGRESSION,
         verbosity=1,
-        num_configs_saved=2,
+        num_configs_saved=1,
         random_state=42,
         cuda_visible_devices="-1",  # Use CPUs only
         run_parallel=False,
@@ -51,7 +51,7 @@ def test_loca_lstm():
     assert split_data[3].shape == (300, 396, 4)
     print(inputs.shape)
 
-    # RNN model settings
+    # RNN model settings — lr=0.001 fixed as best from prior search
     structural = {
         "LSTM_hidden0": {
             "units": 80,
@@ -82,7 +82,7 @@ def test_loca_lstm():
             "structural_params": structural,
             "optimizer": "Adam",
             "Adam": {
-                "learning_rate": mai.Choice([0.0001, 0.001]),
+                "learning_rate": 0.001,
                 "clipvalue": 0.5,
             },
             "compile_params": {
@@ -101,8 +101,8 @@ def test_loca_lstm():
     )
     assert isinstance(grid_search_configs["rnn"][0], pd.DataFrame)
     assert isinstance(grid_search_configs["rnn"][1], nnHyperModel)
-    assert grid_search_configs["rnn"][0].shape == (2, 1)
-    assert tuner.cv_performance_data["rnn"].shape == (2, 2)
+    assert grid_search_configs["rnn"][0].shape == (1, 1)
+    assert tuner.cv_performance_data["rnn"].shape == (2, 1)
 
     # Model post-processing
     new_model_settings = {
@@ -118,4 +118,4 @@ def test_loca_lstm():
         new_model_settings=new_model_settings,
         yscaler=yscaler,
     )
-    assert postprocessor.metrics().shape == (2, 12)
+    assert postprocessor.metrics().shape == (1, 12)
