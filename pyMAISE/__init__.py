@@ -20,4 +20,4 @@ from pyMAISE.utils import Boolean, Choice, Fixed, Float, Int, _try_clear
 _try_clear()
 
 # This should always be the last line of this file
-__version__ = "2.0.1"
+__version__ = "2.1.0"

@@ -2,6 +2,7 @@
 best_hp/
 stubs/
 experiments/
+data/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
