@@ -1,0 +1,76 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pymaise-dev"
+dynamic = ["version"]
+description = "Michigan Artificial Intelligence Standard Environment"
+readme = { file = "README.md", content-type = "text/markdown" }
+license = { text = "Apache 2.0" }
+authors = [{ name = "Patrick Myers", email = "myerspat@umich.edu" }]
+requires-python = ">=3.10,<3.13"
+dependencies = [
+    "pandas",
+    "numpy",
+    "scikit-learn",
+    "scikit-optimize>=0.10.1",
+    "tensorflow[and-cuda]>=2.18.0; sys_platform != 'darwin'",
+    "tensorflow>=2.18.0; sys_platform == 'darwin'",
+    "tensorflow-probability[tf]>=0.25.0",
+    "keras-tuner",
+    "xarray>=2024.10.0",
+    "scikeras",
+    "matplotlib",
+    "tqdm",
+    "pydot",
+    "graphviz",
+]
+classifiers = [
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-cov",
+    "pre-commit",
+    "flake8",
+    "black",
+    "docformatter",
+    "sphinx",
+    "sphinx_rtd_theme",
+    "jupyter",
+    "sphinxcontrib.bibtex",
+    "chardet",
+    "nbsphinx",
+    "opencv-python",
+    "scipy",
+]
+benchmarks = ["jupyter", "opencv-python", "scipy"]
+
+[project.urls]
+Documentation = "https://pymaise.readthedocs.io/en/latest/"
+"Source Code" = "https://github.com/myerspat/pyMAISE"
+
+[tool.setuptools.packages.find]
+include = ["pyMAISE", "pyMAISE.*"]
+
+[tool.setuptools.package-data]
+"pyMAISE.datasets" = ["*.csv"]
+
+[tool.setuptools.dynamic]
+version = { attr = "pyMAISE.__version__" }
+
+[tool.flake8]
+per-file-ignores = ["__init__.py:F401", "./pyMAISE/tuner.py:F401"]
+max-line-length = 88
+extend-ignore = ["E203"]
+
+[tool.docformatter]
+recursive = true
+black = true
+pre-summary-newline = true
